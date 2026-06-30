@@ -409,9 +409,14 @@ export async function fetchTimeline(): Promise<Array<{ date: string; sent: numbe
 
 export async function createContactSupabase(contact: Omit<Contact, 'id' | 'created_at' | 'updated_at'>): Promise<Contact | null> {
   return demoGuard(async () => {
+    const client = getSupabase()
+    if (!client) return null
+    const { data: { user } } = await client.auth.getUser()
+    if (!user) return null
+    const contactWithUserId = { ...contact, user_id: user.id, country: contact.country || 'BE', source: contact.source || 'manual', tags: contact.tags || [] }
     return supabaseRequest<Contact>('contacts', {
       method: 'POST',
-      body: contact,
+      body: contactWithUserId,
       prefer: 'return=representation',
     })
   }).then(r => r as Contact | null)
@@ -419,9 +424,14 @@ export async function createContactSupabase(contact: Omit<Contact, 'id' | 'creat
 
 export async function importContactsSupabase(contacts: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[]): Promise<number> {
   return demoGuard(async () => {
+    const client = getSupabase()
+    if (!client) return 0
+    const { data: { user } } = await client.auth.getUser()
+    if (!user) return 0
+    const contactsWithUserId = contacts.map(c => ({ ...c, user_id: user.id, country: c.country || 'BE', source: c.source || 'import', tags: c.tags || [] }))
     const result = await supabaseRequest<Contact[]>('contacts', {
       method: 'POST',
-      body: contacts,
+      body: contactsWithUserId,
       prefer: 'return=representation',
     })
     return Array.isArray(result) ? result.length : 0
