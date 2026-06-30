@@ -443,11 +443,18 @@ export function ContactsPage() {
           setEditingContact(null)
         }}
         onSave={(data) => {
+          const contactData = {
+            ...data,
+            user_id: useStore.getState().user?.id || 'local-user',
+            country: data.country || 'BE',
+            source: data.source || 'manual',
+            tags: data.tags || [],
+          }
           if (editingContact) {
-            updateContact(editingContact.id, data)
+            updateContact(editingContact.id, contactData)
             addToast({ type: 'success', title: 'Contact mis à jour' })
           } else {
-            addContact(data as any)
+            addContact(contactData as any)
             addToast({ type: 'success', title: 'Contact ajouté' })
           }
           setShowAddModal(false)
@@ -459,8 +466,8 @@ export function ContactsPage() {
       <ImportCSVModal
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImport={(contacts) => {
-          const count = importContacts(contacts)
+        onImport={async (contacts) => {
+          const count = await importContacts(contacts)
           addToast({
             type: 'success',
             title: 'Import réussi',

@@ -120,10 +120,11 @@ export function NewCampaignPage() {
     // Production mode: call real Edge Function
     if (!isDemo && isSupabaseConfigured()) {
       try {
-        const { getAccessToken } = await import('@/lib/supabaseClient')
+        const { getAccessToken, getCurrentSupabaseConfig } = await import('@/lib/supabaseClient')
         const token = await getAccessToken()
-        const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL
-        const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY
+        const config = getCurrentSupabaseConfig()
+        const supabaseUrl = config.url
+        const anonKey = config.key
 
         const response = await fetch(`${supabaseUrl}/functions/v1/send-test-sms`, {
           method: 'POST',
@@ -157,15 +158,24 @@ export function NewCampaignPage() {
 
   const handleSend = async () => {
     setSending(true)
-    addCampaign({
-      user_id: 'user-1',
+    const newCamp = addCampaign({
+      user_id: useStore.getState().user?.id || 'local-user',
       name: form.name,
       message: form.message,
       segment_id: form.segmentType === 'segment' ? form.segmentId : undefined,
-      status: form.sendType === 'schedule' ? 'scheduled' : 'sending',
+      status: form.sendType === 'schedule' ? 'scheduled' : 'draft',
       scheduled_at: form.sendType === 'schedule' ? new Date(`${form.scheduledDate}T${form.scheduledTime}`).toISOString() : undefined,
     })
-    await new Promise((r) => setTimeout(r, 500))
+    await new Promise((r) => setTimeout(r, 300))
+
+    if (newCamp && form.sendType === 'now') {
+      try {
+        await useStore.getState().sendCampaign(newCamp.id)
+      } catch {
+        // Error handled by store
+      }
+    }
+
     addToast({
       type: 'success',
       title: form.sendType === 'schedule' ? 'Campagne planifiée' : 'Campagne envoyée !',
@@ -177,7 +187,7 @@ export function NewCampaignPage() {
 
   const handleSaveDraft = () => {
     addCampaign({
-      user_id: 'user-1',
+      user_id: useStore.getState().user?.id || 'local-user',
       name: form.name || 'Brouillon',
       message: form.message,
       segment_id: form.segmentType === 'segment' ? form.segmentId : undefined,

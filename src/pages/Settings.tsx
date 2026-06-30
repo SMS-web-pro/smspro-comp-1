@@ -249,12 +249,10 @@ function SupabaseTab() {
   // Charger la config existante
   useEffect(() => {
     const { url, key } = getCurrentSupabaseConfig()
-    const hasEnv = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL)
-    const hasLs = typeof window !== 'undefined' && localStorage.getItem('smspro-supabase-config')
-
-    if (hasEnv) {
+    const config = getCurrentSupabaseConfig()
+    if (config.source === 'env') {
       setConfigSource('env')
-    } else if (hasLs) {
+    } else if (config.source === 'local') {
       setConfigSource('local')
     } else {
       setConfigSource('none')
@@ -492,7 +490,9 @@ function SMSTab() {
   const [testing, setTesting] = useState(false)
   const [webhookCopied, setWebhookCopied] = useState(false)
 
-  const supabaseUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) || ''
+  const supabaseUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL)
+    || (() => { try { const s = localStorage.getItem('smspro-supabase-config'); return s ? JSON.parse(s).url || '' : '' } catch { return '' } })()
+    || ''
   const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || 'YOUR-PROJECT'
   const webhookUrl = `https://${projectRef}.supabase.co/functions/v1/twilio-status`
 

@@ -20,19 +20,35 @@ import type {
   InboxMessage,
 } from '@/types'
 import { useStore } from '@/store/useStore'
-import { getSupabase } from '@/lib/supabaseClient'
-
-const SUPABASE_URL: string =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) || ''
-const SUPABASE_ANON_KEY: string =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) || ''
+import { getSupabase, isSupabaseConfigured as isSupabaseConfiguredBase } from '@/lib/supabaseClient'
 
 /**
- * Vérifie si Supabase est configuré
+ * Vérifie si Supabase est configuré (via env vars OU localStorage)
  */
 export function isSupabaseConfigured(): boolean {
-  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
+  return isSupabaseConfiguredBase()
 }
+
+function getSupabaseCredentials(): { url: string; key: string } {
+  const envUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) || ''
+  const envKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) || ''
+  if (envUrl && envKey) return { url: envUrl, key: envKey }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('smspro-supabase-config')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed.url && parsed.key) return { url: parsed.url, key: parsed.key }
+      }
+    } catch {}
+  }
+
+  return { url: '', key: '' }
+}
+
+const SUPABASE_URL: string = getSupabaseCredentials().url
+const SUPABASE_ANON_KEY: string = getSupabaseCredentials().key
 
 /**
  * Récupère le token d'accès depuis la session Supabase active

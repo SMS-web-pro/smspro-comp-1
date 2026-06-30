@@ -63,11 +63,11 @@ interface AppState {
   updateContact: (id: number, updates: Partial<Contact>) => void
   deleteContact: (id: number) => void
   deleteContacts: (ids: number[]) => void
-  importContacts: (newContacts: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[]) => number
+  importContacts: (newContacts: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[]) => Promise<number> | number
 
   // ====== CAMPAIGNS ======
   campaigns: Campaign[]
-  addCampaign: (campaign: Omit<Campaign, 'id' | 'created_at'>) => void
+  addCampaign: (campaign: Omit<Campaign, 'id' | 'created_at'>) => Campaign | void
   updateCampaign: (id: number, updates: Partial<Campaign>) => void
   deleteCampaign: (id: number) => void
   duplicateCampaign: (id: number) => void
@@ -270,8 +270,13 @@ export const useStore = create<AppState>()(
             get().addToast({ type: 'error', title: 'Erreur lors de l\'ajout du contact.' })
           }
         } else {
+          const userId = get().user?.id || 'local-user'
           const newContact: Contact = {
             ...contact,
+            user_id: contact.user_id || userId,
+            country: contact.country || 'BE',
+            source: contact.source || 'manual',
+            tags: contact.tags || [],
             id: nextId(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -343,8 +348,10 @@ export const useStore = create<AppState>()(
           get().addToast({ type: 'error', title: 'Trop de créations rapides.' })
           return
         }
+        const userId = get().user?.id || 'local-user'
         const newCamp: Campaign = {
           ...campaign,
+          user_id: campaign.user_id || userId,
           // Sanitize le message
           message: escapeHtml(campaign.message),
           name: escapeHtml(campaign.name),
@@ -352,6 +359,7 @@ export const useStore = create<AppState>()(
           created_at: new Date().toISOString(),
         }
         set((s) => ({ campaigns: [newCamp, ...s.campaigns] }))
+        return newCamp
       },
       updateCampaign: (id, updates) =>
         set((s) => ({
@@ -421,10 +429,11 @@ export const useStore = create<AppState>()(
           }))
 
           try {
-            const { getAccessToken } = await import('@/lib/supabaseClient')
+            const { getAccessToken, getCurrentSupabaseConfig } = await import('@/lib/supabaseClient')
             const token = await getAccessToken()
-            const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL
-            const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY
+            const config = getCurrentSupabaseConfig()
+            const supabaseUrl = config.url
+            const anonKey = config.key
 
             const response = await fetch(`${supabaseUrl}/functions/v1/send-campaign`, {
               method: 'POST',
@@ -442,6 +451,9 @@ export const useStore = create<AppState>()(
             }
 
             const result = await response.json()
+            const sentCount = result.sent ?? result.total_sent ?? total
+            const failedCount = result.failed ?? result.total_failed ?? 0
+            const deliveredCount = sentCount - failedCount
             set((s) => ({
               campaigns: s.campaigns.map((c) =>
                 c.id === id
@@ -450,13 +462,13 @@ export const useStore = create<AppState>()(
                       status: 'sent',
                       completed_at: new Date().toISOString(),
                       stats: {
-                        total_sent: result.total_sent ?? total,
-                        total_delivered: result.total_delivered ?? 0,
-                        total_failed: result.total_failed ?? 0,
+                        total_sent: sentCount,
+                        total_delivered: deliveredCount,
+                        total_failed: failedCount,
                         total_pending: 0,
                         total_cost: result.total_cost ?? 0,
-                        delivery_rate: result.total_sent > 0
-                          ? Math.round((result.total_delivered / result.total_sent) * 10000) / 100
+                        delivery_rate: sentCount > 0
+                          ? Math.round((deliveredCount / sentCount) * 10000) / 100
                           : 0,
                       },
                     }
@@ -868,7 +880,7 @@ export const useStore = create<AppState>()(
           selectedContacts: Array.isArray(p?.selectedContacts) ? p!.selectedContacts as number[] : current.selectedContacts,
         }
       },
-      version: 2,
+      version: 3,
     }
   )
 )
