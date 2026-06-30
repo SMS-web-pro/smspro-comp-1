@@ -171,9 +171,7 @@ export async function getSession(): Promise<Session | null> {
   if (!client) return null
   try {
     const { data } = await client.auth.getSession()
-    if (data.session) return data.session
-    const { data: refreshed } = await client.auth.refreshSession()
-    return refreshed.session
+    return data.session
   } catch {
     return null
   }
@@ -184,9 +182,7 @@ export async function getAccessToken(): Promise<string | null> {
   if (!client) return null
   try {
     const { data } = await client.auth.getSession()
-    if (data.session?.access_token) return data.session.access_token
-    const { data: refreshed } = await client.auth.refreshSession()
-    return refreshed.session?.access_token ?? null
+    return data.session?.access_token ?? null
   } catch {
     return null
   }

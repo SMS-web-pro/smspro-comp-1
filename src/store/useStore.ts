@@ -262,12 +262,21 @@ export const useStore = create<AppState>()(
           return
         }
         if (!get().isDemo && isSupabaseConfigured()) {
-          const { createContactSupabase } = await import('@/lib/supabase')
-          const result = await createContactSupabase(contact)
-          if (result) {
-            set((s) => ({ contacts: [result, ...s.contacts] }))
-          } else {
-            get().addToast({ type: 'error', title: 'Erreur lors de l\'ajout du contact.' })
+          try {
+            const { createContactSupabase } = await import('@/lib/supabase')
+            const result = await createContactSupabase(contact)
+            if (result) {
+              set((s) => ({ contacts: [result, ...s.contacts] }))
+            } else {
+              get().addToast({ type: 'error', title: 'Erreur lors de l\'ajout du contact.' })
+            }
+          } catch (err) {
+            const msg = (err as Error).message || ''
+            if (msg.includes('23505') || msg.includes('duplicate') || msg.includes('409')) {
+              get().addToast({ type: 'warning', title: 'Ce numéro existe déjà', description: `${contact.phone} est déjà dans vos contacts.` })
+            } else {
+              get().addToast({ type: 'error', title: 'Erreur lors de l\'ajout', description: msg })
+            }
           }
         } else {
           const userId = get().user?.id || 'local-user'

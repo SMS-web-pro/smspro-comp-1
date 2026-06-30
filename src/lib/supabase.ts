@@ -66,9 +66,7 @@ async function getAccessToken(): Promise<string | null> {
     const client = getSupabase()
     if (!client) return null
     const { data } = await client.auth.getSession()
-    if (data.session?.access_token) return data.session.access_token
-    const { data: refreshed } = await client.auth.refreshSession()
-    return refreshed.session?.access_token ?? null
+    return data.session?.access_token ?? null
   } catch {
     return null
   }
@@ -155,7 +153,7 @@ export async function createContact(contact: Omit<Contact, 'id' | 'created_at' |
     return supabaseRequest<Contact>('contacts', {
       method: 'POST',
       body: contact,
-      prefer: 'return=representation',
+      prefer: 'return=representation,resolution=merge-duplicates',
     })
   }).then((r) => r as Contact)
 }

@@ -554,9 +554,15 @@ function SMSTab() {
     }
   }
 
+  const [testPhone, setTestPhone] = useState('')
+
   const handleTest = async () => {
     if (!isConfigured) {
       addToast({ type: 'error', title: 'Configuration incomplète', description: 'Renseignez SID, Token et numéro' })
+      return
+    }
+    if (!testPhone || !/^\+\d{6,15}$/.test(testPhone.replace(/[\s\-().]/g, ''))) {
+      addToast({ type: 'error', title: 'Numéro de test invalide', description: 'Entrez un numéro au format +CCXXXXXXXXX' })
       return
     }
     setTesting(true)
@@ -579,7 +585,7 @@ function SMSTab() {
           Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          phone: config.senderNumber,
+          phone: testPhone.replace(/[\s\-().]/g, ''),
           message: 'SMSPro: Test de connexion Twilio réussi !',
         }),
       })
@@ -607,6 +613,7 @@ function SMSTab() {
 
   return (
     <div className="space-y-6">
+      <form onSubmit={(e) => e.preventDefault()}>
       {/* Credentials Twilio */}
       <Card>
         <CardHeader>
@@ -655,6 +662,17 @@ function SMSTab() {
             💡 Format E.164 international. Exemples : 🇧🇪 +32, 🇫🇷 +33, 🇲🇦 +212, 🇨🇦 +1
           </p>
 
+          <Input
+            label="Numéro de test"
+            value={testPhone}
+            onChange={(e) => setTestPhone(e.target.value)}
+            placeholder="+32470123456"
+            leftIcon={<PhoneIcon className="h-4 w-4" />}
+          />
+          <p className="text-xs text-slate-500">
+            💡 Numéro différent du numéro expéditeur (Twilio interdit l'envoi à soi-même)
+          </p>
+
           <div className="flex items-center gap-2 pt-2">
             <Button
               variant="outline"
@@ -674,6 +692,7 @@ function SMSTab() {
           </div>
         </CardContent>
       </Card>
+      </form>
 
       {/* Webhook */}
       <Card>
