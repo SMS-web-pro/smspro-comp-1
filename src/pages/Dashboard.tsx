@@ -58,17 +58,20 @@ export function DashboardPage() {
   }, [isDemo])
 
   const stats = useMemo(() => {
-    const activeContacts = contacts.filter((c) => c.opted_in).length
-    const monthCampaigns = campaigns.filter((c) => {
+    const safeContacts = Array.isArray(contacts) ? contacts : []
+    const safeCampaigns = Array.isArray(campaigns) ? campaigns : []
+    const activeContacts = safeContacts.filter((c) => c?.opted_in).length
+    const monthCampaigns = safeCampaigns.filter((c) => {
+      if (!c?.created_at) return false
       const created = new Date(c.created_at)
       const now = new Date()
       return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
     }).length
-    const allStats = campaigns.filter((c) => c.stats).map((c) => c.stats!)
-    const totalDelivered = allStats.reduce((sum, s) => sum + s.total_delivered, 0)
-    const totalSent = allStats.reduce((sum, s) => sum + s.total_sent, 0)
+    const allStats = safeCampaigns.filter((c) => c?.stats).map((c) => c.stats!)
+    const totalDelivered = allStats.reduce((sum, s) => sum + (s?.total_delivered || 0), 0)
+    const totalSent = allStats.reduce((sum, s) => sum + (s?.total_sent || 0), 0)
     const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 10000) / 100 : 0
-    const totalCost = allStats.reduce((sum, s) => sum + s.total_cost, 0)
+    const totalCost = allStats.reduce((sum, s) => sum + (s?.total_cost || 0), 0)
     return {
       activeContacts: realStats?.activeContacts ?? activeContacts,
       monthCampaigns: realStats?.totalCampaigns ?? monthCampaigns,
@@ -76,45 +79,57 @@ export function DashboardPage() {
       totalCost: realStats?.totalCost ?? totalCost,
       totalSent: realStats?.totalSent ?? totalSent,
       totalDelivered: realStats?.totalDelivered ?? totalDelivered,
-      totalContacts: realStats?.totalContacts ?? contacts.length,
+      totalContacts: realStats?.totalContacts ?? safeContacts.length,
     }
   }, [contacts, campaigns, realStats])
 
   // Engagement global (lu / cliqué) — basé sur les vraies données
   const engagement = useMemo(() => {
-    return computeEngagement([])
+    try {
+      return computeEngagement([])
+    } catch {
+      return { readRate: 0, read: 0, clickRate: 0, clicked: 0, replied: 0, replyRate: 0, optedOut: 0, optOutRate: 0 }
+    }
   }, [campaigns])
 
   const timelineData = useMemo(() => generateTimelineData(), [])
 
-  const recentCampaigns = useMemo(
-    () => [...campaigns].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5),
-    [campaigns]
-  )
+  const recentCampaigns = useMemo(() => {
+    if (!Array.isArray(campaigns) || campaigns.length === 0) return []
+    return [...campaigns]
+      .filter((c) => c && typeof c === 'object')
+      .sort((a, b) => {
+        const da = a?.created_at ? new Date(a.created_at).getTime() : 0
+        const db = b?.created_at ? new Date(b.created_at).getTime() : 0
+        return db - da
+      })
+      .slice(0, 5)
+  }, [campaigns])
 
   // Données affichées - pas de "trend" hardcodé en production
+  const safeStats = stats || { activeContacts: 0, monthCampaigns: 0, deliveryRate: 0, totalCost: 0, totalSent: 0, totalDelivered: 0, totalContacts: 0 }
   const statCards = [
     {
       title: 'Contacts actifs',
-      value: formatNumber(stats.activeContacts),
+      value: formatNumber(safeStats.activeContacts),
       icon: Users,
       color: 'blue',
     },
     {
       title: 'Campagnes ce mois',
-      value: formatNumber(stats.monthCampaigns),
+      value: formatNumber(safeStats.monthCampaigns),
       icon: Send,
       color: 'green',
     },
     {
       title: 'Taux de délivrance',
-      value: stats.totalSent > 0 ? `${stats.deliveryRate}%` : '—',
+      value: safeStats.totalSent > 0 ? `${safeStats.deliveryRate}%` : '—',
       icon: CheckCircle2,
       color: 'purple',
     },
     {
       title: 'Coût total',
-      value: formatCurrency(stats.totalCost),
+      value: formatCurrency(safeStats.totalCost),
       icon: Wallet,
       color: 'orange',
     },
