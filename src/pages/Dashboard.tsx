@@ -17,19 +17,45 @@ import {
   UserMinus,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { useState, useEffect, useMemo } from 'react'
 import { useStore } from '@/store/useStore'
+import { isSupabaseConfigured } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatCurrency, formatNumber, formatRelativeDate } from '@/lib/utils'
 import { generateTimelineData } from '@/lib/mockData'
 import { computeEngagement } from '@/components/campaigns/EngagementTracker'
-import { useMemo } from 'react'
 
 export function DashboardPage() {
   const store = useStore()
   const contacts = store.contacts ?? []
   const campaigns = store.campaigns ?? []
+  const isDemo = store.isDemo
+
+  const [realStats, setRealStats] = useState<{
+    totalContacts: number
+    activeContacts: number
+    totalCampaigns: number
+    totalSent: number
+    totalDelivered: number
+    totalCost: number
+    deliveryRate: number
+  } | null>(null)
+
+  useEffect(() => {
+    async function loadRealStats() {
+      if (isDemo || !isSupabaseConfigured()) return
+      try {
+        const { fetchDashboardStats } = await import('@/lib/supabase')
+        const stats = await fetchDashboardStats()
+        setRealStats(stats)
+      } catch {
+        // Fallback to local stats
+      }
+    }
+    loadRealStats()
+  }, [isDemo])
 
   const stats = useMemo(() => {
     const activeContacts = contacts.filter((c) => c.opted_in).length
@@ -43,8 +69,16 @@ export function DashboardPage() {
     const totalSent = allStats.reduce((sum, s) => sum + s.total_sent, 0)
     const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 10000) / 100 : 0
     const totalCost = allStats.reduce((sum, s) => sum + s.total_cost, 0)
-    return { activeContacts, monthCampaigns, deliveryRate, totalCost, totalSent, totalDelivered }
-  }, [contacts, campaigns])
+    return {
+      activeContacts: realStats?.activeContacts ?? activeContacts,
+      monthCampaigns: realStats?.totalCampaigns ?? monthCampaigns,
+      deliveryRate: realStats?.deliveryRate ?? deliveryRate,
+      totalCost: realStats?.totalCost ?? totalCost,
+      totalSent: realStats?.totalSent ?? totalSent,
+      totalDelivered: realStats?.totalDelivered ?? totalDelivered,
+      totalContacts: realStats?.totalContacts ?? contacts.length,
+    }
+  }, [contacts, campaigns, realStats])
 
   // Engagement global (lu / cliqué) — basé sur les vraies données
   const engagement = useMemo(() => {
