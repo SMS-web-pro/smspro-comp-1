@@ -158,7 +158,7 @@ export function NewCampaignPage() {
 
   const handleSend = async () => {
     setSending(true)
-    const newCamp = addCampaign({
+    const newCamp = await addCampaign({
       user_id: useStore.getState().user?.id || 'local-user',
       name: form.name,
       message: form.message,
@@ -185,8 +185,8 @@ export function NewCampaignPage() {
     navigate('/campaigns')
   }
 
-  const handleSaveDraft = () => {
-    addCampaign({
+  const handleSaveDraft = async () => {
+    await addCampaign({
       user_id: useStore.getState().user?.id || 'local-user',
       name: form.name || 'Brouillon',
       message: form.message,

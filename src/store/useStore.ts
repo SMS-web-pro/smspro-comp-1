@@ -67,7 +67,7 @@ interface AppState {
 
   // ====== CAMPAIGNS ======
   campaigns: Campaign[]
-  addCampaign: (campaign: Omit<Campaign, 'id' | 'created_at'>) => Campaign | void
+  addCampaign: (campaign: Omit<Campaign, 'id' | 'created_at'>) => Promise<Campaign | void>
   updateCampaign: (id: number, updates: Partial<Campaign>) => void
   deleteCampaign: (id: number) => void
   duplicateCampaign: (id: number) => void
@@ -343,18 +343,34 @@ export const useStore = create<AppState>()(
       // CAMPAIGNS - Vide au démarrage
       // ============================================================
       campaigns: [],
-      addCampaign: (campaign) => {
+      addCampaign: async (campaign) => {
         if (!get().canPerformAction('addCampaign', 20)) {
           get().addToast({ type: 'error', title: 'Trop de créations rapides.' })
           return
         }
         const userId = get().user?.id || 'local-user'
-        const newCamp: Campaign = {
+        const payload = {
           ...campaign,
           user_id: campaign.user_id || userId,
-          // Sanitize le message
           message: escapeHtml(campaign.message),
           name: escapeHtml(campaign.name),
+        }
+
+        if (!get().isDemo && isSupabaseConfigured()) {
+          try {
+            const { createCampaign } = await import('@/lib/supabase')
+            const dbCampaign = await createCampaign(payload)
+            set((s) => ({ campaigns: [dbCampaign, ...s.campaigns] }))
+            return dbCampaign
+          } catch (err) {
+            console.error('Failed to create campaign in Supabase:', err)
+            get().addToast({ type: 'error', title: 'Erreur création campagne', description: (err as Error).message })
+            return
+          }
+        }
+
+        const newCamp: Campaign = {
+          ...payload,
           id: nextId(),
           created_at: new Date().toISOString(),
         }

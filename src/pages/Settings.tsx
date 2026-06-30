@@ -336,6 +336,7 @@ function SupabaseTab() {
 
   return (
     <Card>
+      <form onSubmit={(e) => e.preventDefault()}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Server className="h-4 w-4 text-emerald-500" />
@@ -461,6 +462,7 @@ function SupabaseTab() {
           </p>
         </div>
       </CardContent>
+      </form>
     </Card>
   )
 }

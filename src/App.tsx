@@ -1,3 +1,4 @@
+import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LoginPage } from '@/pages/auth/Login'
@@ -20,6 +21,29 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useStore()
+  const [checking, setChecking] = useState(true)
+
+  React.useEffect(() => {
+    async function validate() {
+      try {
+        const { getSupabase } = await import('@/lib/supabaseClient')
+        const client = getSupabase()
+        if (client) {
+          const { data } = await client.auth.getSession()
+          if (!data.session) {
+            const { signOut } = await import('@/lib/supabaseClient')
+            await signOut()
+            useStore.getState().logout?.()
+            return
+          }
+        }
+      } catch {}
+      setChecking(false)
+    }
+    validate()
+  }, [])
+
+  if (checking) return null
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
 }
