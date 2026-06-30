@@ -171,7 +171,9 @@ export async function getSession(): Promise<Session | null> {
   if (!client) return null
   try {
     const { data } = await client.auth.getSession()
-    return data.session
+    if (data.session) return data.session
+    const { data: refreshed } = await client.auth.refreshSession()
+    return refreshed.session
   } catch {
     return null
   }
@@ -182,7 +184,9 @@ export async function getAccessToken(): Promise<string | null> {
   if (!client) return null
   try {
     const { data } = await client.auth.getSession()
-    return data.session?.access_token ?? null
+    if (data.session?.access_token) return data.session.access_token
+    const { data: refreshed } = await client.auth.refreshSession()
+    return refreshed.session?.access_token ?? null
   } catch {
     return null
   }
@@ -204,6 +208,16 @@ export async function getCurrentUser(): Promise<any | null> {
       .select('*')
       .eq('id', user.id)
       .single()
+
+    if (!data) {
+      await updateUserSettings({})
+      const { data: retry } = await client
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      if (retry) return retry
+    }
 
     return data || {
       id: user.id,
@@ -229,6 +243,16 @@ export async function fetchUserSettings(): Promise<any | null> {
       .eq('id', user.id)
       .single()
 
+    if (!data) {
+      await updateUserSettings({})
+      const { data: retry } = await client
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      return retry
+    }
+
     return data
   } catch {
     return null
@@ -243,8 +267,14 @@ export async function updateUserSettings(updates: Record<string, any>): Promise<
 
   const { error } = await client
     .from('users')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', user.id)
+    .upsert({
+      id: user.id,
+      email: user.email || '',
+      name: user.user_metadata?.name || user.email?.split('@')[0] || 'Utilisateur',
+      role: user.user_metadata?.role || 'user',
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
 
   if (error) throw new Error(error.message)
 }

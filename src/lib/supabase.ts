@@ -51,6 +51,14 @@ const SUPABASE_URL: string = getSupabaseCredentials().url
 const SUPABASE_ANON_KEY: string = getSupabaseCredentials().key
 
 /**
+ * Récupère les credentials dynamiquement (pas de cache statique)
+ */
+function getCredentials() {
+  const creds = getSupabaseCredentials()
+  return { url: creds.url || SUPABASE_URL, key: creds.key || SUPABASE_ANON_KEY }
+}
+
+/**
  * Récupère le token d'accès depuis la session Supabase active
  */
 async function getAccessToken(): Promise<string | null> {
@@ -58,7 +66,9 @@ async function getAccessToken(): Promise<string | null> {
     const client = getSupabase()
     if (!client) return null
     const { data } = await client.auth.getSession()
-    return data.session?.access_token ?? null
+    if (data.session?.access_token) return data.session.access_token
+    const { data: refreshed } = await client.auth.refreshSession()
+    return refreshed.session?.access_token ?? null
   } catch {
     return null
   }
@@ -68,13 +78,14 @@ async function getAccessToken(): Promise<string | null> {
  * Headers par défaut pour les requêtes Supabase
  */
 async function getHeaders(includeAuth = true): Promise<Record<string, string>> {
+  const { key } = getCredentials()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    apikey: SUPABASE_ANON_KEY,
+    apikey: key,
   }
   if (includeAuth) {
     const token = await getAccessToken()
-    headers['Authorization'] = `Bearer ${token || SUPABASE_ANON_KEY}`
+    headers['Authorization'] = `Bearer ${token || key}`
   }
   return headers
 }
@@ -92,11 +103,13 @@ async function supabaseRequest<T>(
   } = {}
 ): Promise<T> {
   const { method = 'GET', body, query = '', prefer } = options
-  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`
+  const { url } = getCredentials()
+  if (!url) throw new Error('Supabase non configuré')
+  const requestUrl = `${url}/rest/v1/${table}${query}`
   const headers = await getHeaders()
   if (prefer) headers['Prefer'] = prefer
 
-  const response = await fetch(url, {
+  const response = await fetch(requestUrl, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,

@@ -36,5 +36,6 @@ GROUP BY DATE(sl.sent_at), camp.user_id
 ORDER BY date DESC;
 
 -- Politique : service role bypass RLS pour les webhooks
+DROP POLICY IF EXISTS "Service role can insert sms_logs" ON public.sms_logs;
 CREATE POLICY "Service role can insert sms_logs" ON public.sms_logs
   FOR INSERT WITH CHECK (true);
