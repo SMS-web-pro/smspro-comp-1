@@ -177,6 +177,17 @@ export async function getSession(): Promise<Session | null> {
   }
 }
 
+export async function getAccessToken(): Promise<string | null> {
+  const client = getSupabase()
+  if (!client) return null
+  try {
+    const { data } = await client.auth.getSession()
+    return data.session?.access_token ?? null
+  } catch {
+    return null
+  }
+}
+
 // =====================================================
 // USER PROFILE
 // =====================================================

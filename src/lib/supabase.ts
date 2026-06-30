@@ -402,3 +402,28 @@ export async function fetchTimeline(): Promise<Array<{ date: string; sent: numbe
     return supabaseRequest<any>('v_send_timeline?select=*&order=date.asc')
   }).then((r) => r || [])
 }
+
+// =====================================================
+// CONTACT CRUD (for store integration)
+// =====================================================
+
+export async function createContactSupabase(contact: Omit<Contact, 'id' | 'created_at' | 'updated_at'>): Promise<Contact | null> {
+  return demoGuard(async () => {
+    return supabaseRequest<Contact>('contacts', {
+      method: 'POST',
+      body: contact,
+      prefer: 'return=representation',
+    })
+  }).then(r => r as Contact | null)
+}
+
+export async function importContactsSupabase(contacts: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[]): Promise<number> {
+  return demoGuard(async () => {
+    const result = await supabaseRequest<Contact[]>('contacts', {
+      method: 'POST',
+      body: contacts,
+      prefer: 'return=representation',
+    })
+    return Array.isArray(result) ? result.length : 0
+  }).then(r => r ?? 0)
+}

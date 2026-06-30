@@ -256,18 +256,28 @@ export const useStore = create<AppState>()(
         set((s) => ({
           selectedContacts: s.selectedContacts.length === ids.length ? [] : ids,
         })),
-      addContact: (contact) => {
+      addContact: async (contact) => {
         if (!get().canPerformAction('addContact', 30)) {
           get().addToast({ type: 'error', title: 'Trop d\'ajouts rapides, patientez.' })
           return
         }
-        const newContact: Contact = {
-          ...contact,
-          id: nextId(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+        if (!get().isDemo && isSupabaseConfigured()) {
+          const { createContactSupabase } = await import('@/lib/supabase')
+          const result = await createContactSupabase(contact)
+          if (result) {
+            set((s) => ({ contacts: [result, ...s.contacts] }))
+          } else {
+            get().addToast({ type: 'error', title: 'Erreur lors de l\'ajout du contact.' })
+          }
+        } else {
+          const newContact: Contact = {
+            ...contact,
+            id: nextId(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+          set((s) => ({ contacts: [newContact, ...s.contacts] }))
         }
-        set((s) => ({ contacts: [newContact, ...s.contacts] }))
       },
       updateContact: (id, updates) =>
         set((s) => ({
@@ -285,7 +295,16 @@ export const useStore = create<AppState>()(
           contacts: s.contacts.filter((c) => !ids.includes(c.id)),
           selectedContacts: [],
         })),
-      importContacts: (newContacts) => {
+      importContacts: async (newContacts) => {
+        if (!get().isDemo && isSupabaseConfigured()) {
+          const { importContactsSupabase } = await import('@/lib/supabase')
+          const count = await importContactsSupabase(newContacts)
+          if (count > 0) {
+            const refreshed = await fetchContacts()
+            set({ contacts: refreshed ?? [] })
+          }
+          return count
+        }
         let count = 0
         set((s) => {
           const updatedContacts = [...s.contacts]
@@ -377,6 +396,97 @@ export const useStore = create<AppState>()(
           })
           return
         }
+
+        // Production mode: call real Edge Function
+        if (!get().isDemo && isSupabaseConfigured()) {
+          // Set status to sending
+          set((s) => ({
+            campaigns: s.campaigns.map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    status: 'sending',
+                    sent_at: new Date().toISOString(),
+                    stats: {
+                      total_sent: total,
+                      total_delivered: 0,
+                      total_failed: 0,
+                      total_pending: total,
+                      total_cost: 0,
+                      delivery_rate: 0,
+                    },
+                  }
+                : c
+            ),
+          }))
+
+          try {
+            const { getAccessToken } = await import('@/lib/supabaseClient')
+            const token = await getAccessToken()
+            const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL
+            const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY
+
+            const response = await fetch(`${supabaseUrl}/functions/v1/send-campaign`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token || anonKey}`,
+                'apikey': anonKey,
+              },
+              body: JSON.stringify({ campaign_id: id }),
+            })
+
+            if (!response.ok) {
+              const errText = await response.text()
+              throw new Error(errText || `HTTP ${response.status}`)
+            }
+
+            const result = await response.json()
+            set((s) => ({
+              campaigns: s.campaigns.map((c) =>
+                c.id === id
+                  ? {
+                      ...c,
+                      status: 'sent',
+                      completed_at: new Date().toISOString(),
+                      stats: {
+                        total_sent: result.total_sent ?? total,
+                        total_delivered: result.total_delivered ?? 0,
+                        total_failed: result.total_failed ?? 0,
+                        total_pending: 0,
+                        total_cost: result.total_cost ?? 0,
+                        delivery_rate: result.total_sent > 0
+                          ? Math.round((result.total_delivered / result.total_sent) * 10000) / 100
+                          : 0,
+                      },
+                    }
+                  : c
+              ),
+            }))
+          } catch (err) {
+            // Revert to draft on error
+            set((s) => ({
+              campaigns: s.campaigns.map((c) =>
+                c.id === id
+                  ? {
+                      ...c,
+                      status: 'draft',
+                      sent_at: undefined,
+                      stats: undefined,
+                    }
+                  : c
+              ),
+            }))
+            get().addToast({
+              type: 'error',
+              title: 'Échec de l\'envoi',
+              description: (err as Error).message || 'Erreur inconnue lors de l\'envoi.',
+            })
+          }
+          return
+        }
+
+        // Demo mode: local simulation
         const failed = Math.floor(total * 0.02)
         const delivered = total - failed
 
